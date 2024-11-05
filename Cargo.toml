@@ -2,5 +2,33 @@
 name = "redis-counter-exporter"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
+authors = ["Alec Embke <aembke@gmail.com>"]
+description = "Utility to export Redis counters to PostgreSQL."
+readme = "README.md"
+repository = "https://github.com/aembke/redis-counter-exporter"
+homepage = "https://github.com/aembke/redis-counter-exporter"
+license = "MIT"
+exclude = ["tests", ".circleci", "bin", ".github", "docs"]
 
 [dependencies]
+log = "0.4"
+pretty_env_logger = "0.5"
+regex = "1.10"
+futures = "0.3"
+tokio = { version = "1.37", features = ["full"] }
+tokio-postgres = { version = "0.7.12", features = ["runtime", "with-chrono-0_4"] }
+openssl = { version = "0.10.68", features = ["vendored"] }
+postgres-openssl = { version = "0.5.0", features = ["runtime"] }
+fred = { version = "9.3.0", features = ["i-std", "i-cluster", "i-memory", "replicas", "enable-native-tls", "vendored-openssl"] }
+indicatif = "0.17"
+csv = "1.1"
+serde_json = "1.0"
+parking_lot = "0.12"
+chrono = "0.4"
+once_cell = "1.19"
+clap = { version = "4.5", features = ["wrap_help", "derive", "env"] }
+
+[features]
+default = []
+network-logs = ["fred/network-logs", "fred/debug-ids"]

@@ -1,0 +1,91 @@
+version: '2'
+
+networks:
+  redis-counter-exporter:
+    driver: bridge
+
+services:
+  redis-main:
+    container_name: "redis-main"
+    image: 'bitnami/redis:${REDIS_VERSION}'
+    environment:
+      - 'REDIS_PORT_NUMBER=6379'
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+    ports:
+      - "6379:6379"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-1:
+    container_name: "redis-cluster-1"
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+    ports:
+      - "30001:30001"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-2:
+    container_name: "redis-cluster-2"
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+    ports:
+      - "30002:30001"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-3:
+    container_name: "redis-cluster-3"
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+    ports:
+      - "30003:30001"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-4:
+    container_name: "redis-cluster-4"
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+    ports:
+      - "30004:30001"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-5:
+    container_name: "redis-cluster-5"
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+    ports:
+      - "30005:30001"
+    networks:
+      - redis-counter-exporter
+  redis-cluster-6:
+    container_name: "redis-cluster-6"
+    depends_on:
+      - redis-cluster-1
+      - redis-cluster-2
+      - redis-cluster-3
+      - redis-cluster-4
+      - redis-cluster-5
+    image: 'bitnami/redis-cluster:${REDIS_VERSION}'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=30001'
+      - 'REDIS_NODES=redis-cluster-1 redis-cluster-2 redis-cluster-3 redis-cluster-4 redis-cluster-5 redis-cluster-6'
+      - 'REDIS_CLUSTER_REPLICAS=1'
+      - 'REDIS_CLUSTER_CREATOR=yes'
+    ports:
+      - "30006:30001"
+    networks:
+      - redis-counter-exporter

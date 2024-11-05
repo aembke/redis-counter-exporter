@@ -1,0 +1,29 @@
+#!/bin/bash
+. $PWD/tests/scripts/utils.sh
+
+if [ -z "$REDIS_VERSION" ]; then
+  export REDIS_VERSION=7.4.0
+fi
+
+if [ -z "$CARGO_HTTP_DEBUG" ]; then
+  export CARGO_HTTP_DEBUG=false
+fi
+
+export PSQL_USERNAME="foo" \
+       PSQL_PASSWORD="bar"
+
+REDIS_CLI_PATH="$PWD/tests/tmp/redis_$REDIS_VERSION/redis-$REDIS_VERSION/src/redis-cli"
+read -p "Build redis-cli for Redis $REDIS_VERSION? [y/n]: " INSTALL_CLI
+if [ "$INSTALL_CLI" = "y" ]; then
+  check_redis
+  if [[ "$?" -eq 0 ]]; then
+    install_redis
+  fi
+fi
+
+if [ -f "$REDIS_CLI_PATH" ]; then
+  alias fred_redis_cli='$REDIS_CLI_PATH "$@"'
+  echo "Use the \`fred_redis_cli\` alias to run redis-cli@$REDIS_VERSION"
+fi
+
+export ROOT=$PWD
