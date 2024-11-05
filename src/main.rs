@@ -9,10 +9,10 @@ use fred::{
   prelude::RedisErrorKind,
   types::{Builder, Server},
 };
-use log::{debug, info, log_enabled, trace, Level};
-use std::{sync::Arc, time::Duration};
+use log::{debug, log_enabled, trace, Level};
+use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tokio_postgres::{error::Error as PostgresError, tls::MakeTlsConnect, Client, NoTls, Socket};
+use tokio_postgres::{error::Error as PostgresError, Client, NoTls};
 
 mod argv;
 mod exporter;
@@ -87,6 +87,9 @@ async fn main() -> Result<(), RedisError> {
   let argv = Arc::new(Argv::parse().fix());
   argv.set_globals();
   debug!("Argv: {:?}", argv);
+  if argv.redis_tls || argv.psql_tls {
+    openssl::init();
+  }
   let (_, nodes) = init_redis(&argv).await.expect("Failed to initialize Redis client");
   let (psql_client, psql_conn) = init_psql(&argv).await.expect("Failed to initialize PostgreSQL client");
 
@@ -112,16 +115,22 @@ async fn main() -> Result<(), RedisError> {
   if !argv.dry_run {
     debug!("Saving index to PostgreSQL...");
     let sigint_task = tokio::spawn(async move {
-      let _ = tokio::signal::ctrl_c().await;
-      if quiet {
-        eprintln!("SIGINT received. Exiting now could result in lost data. Send SIGKILL to stop.");
-      } else {
-        status!("SIGINT received. Exiting now could result in lost data. Send SIGKILL to stop.");
+      loop {
+        let _ = tokio::signal::ctrl_c().await;
+        if quiet {
+          eprintln!("SIGINT received. Exiting now could result in lost data. Send SIGKILL to stop.");
+        } else {
+          status!("SIGINT received. Exiting now could result in lost data. Send SIGKILL to stop.");
+        }
       }
     });
     exporter::save(&argv, &progress, index, psql_client).await?;
     sigint_task.abort();
     psql_conn.abort();
+  } else if argv.quiet {
+    println!("Skip saving to PostgreSQL during dry run.");
+  } else {
+    status!("Skip saving to PostgreSQL during dry run.");
   }
 
   progress.update_totals(&counters);

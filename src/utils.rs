@@ -28,10 +28,16 @@ use futures::{
   TryStreamExt,
 };
 use log::{debug, error, log_enabled, trace, warn};
+use openssl::{
+  pkey::PKey,
+  ssl::{SslConnector, SslMethod},
+  x509::X509,
+};
 use postgres_openssl::MakeTlsConnector;
 use regex::Regex;
 use std::{
   collections::HashMap,
+  fmt::Debug,
   fs,
   future::Future,
   sync::atomic::{AtomicUsize, Ordering},
@@ -43,7 +49,7 @@ use tokio::{
   task::JoinHandle,
   time::sleep,
 };
-use tokio_postgres::{error::Error as PostgresError, Connection, NoTls, Socket};
+use tokio_postgres::{error::Error as PostgresError, Connection, Socket};
 
 pub const DEFAULT_ESTIMATE_UPDATE_INTERVAL: StdDuration = StdDuration::from_millis(2500);
 
@@ -59,10 +65,14 @@ pub fn set_atomic(val: &AtomicUsize, amt: usize) -> usize {
   val.swap(amt, Ordering::SeqCst)
 }
 
+fn map_tls_error<E: Debug>(e: E) -> RedisError {
+  RedisError::new(RedisErrorKind::Tls, format!("{:?}", e))
+}
+
 fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, RedisError> {
   use fred::native_tls::{Certificate, Identity, TlsConnector};
 
-  if argv.tls {
+  if argv.redis_tls {
     let mut builder = TlsConnector::builder();
     if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
       debug!("Reading CA certificate from {}", ca_cert_path);
@@ -101,7 +111,44 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, RedisError> {
 
 pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, RedisError> {
   if argv.psql_tls {
-    unimplemented!()
+    let mut builder = SslConnector::builder(SslMethod::tls()).map_err(map_tls_error)?;
+
+    if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+      debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
+      let buf = fs::read(ca_cert_path)?;
+      let trusted_cert = X509::from_pem(&buf).map_err(map_tls_error)?;
+      builder.cert_store_mut().add_cert(trusted_cert).map_err(map_tls_error)?;
+    }
+
+    if let Some(key_path) = argv.tls_key.as_ref() {
+      if let Some(cert_path) = argv.tls_cert.as_ref() {
+        debug!(
+          "Reading PostgreSQL client key from {}, cert from {}",
+          key_path, cert_path
+        );
+        let client_key_buf = fs::read(key_path)?;
+        let client_cert_buf = fs::read(cert_path)?;
+
+        let client_cert_chain = if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+          let ca_cert_buf = fs::read(ca_cert_path)?;
+
+          let mut chain = Vec::with_capacity(ca_cert_buf.len() + client_cert_buf.len());
+          chain.extend(&client_cert_buf);
+          chain.extend(&ca_cert_buf);
+          chain
+        } else {
+          client_cert_buf
+        };
+        let pkey = PKey::private_key_from_pem(&client_key_buf).map_err(map_tls_error)?;
+
+        let cert_ref = X509::from_pem(&client_cert_chain).map_err(map_tls_error)?;
+        builder.set_private_key(&pkey).map_err(map_tls_error)?;
+        builder.set_certificate(cert_ref.as_ref()).map_err(map_tls_error)?;
+        builder.check_private_key().map_err(map_tls_error)?;
+      }
+    }
+
+    Ok(Some(MakeTlsConnector::new(builder.build())))
   } else {
     Ok(None)
   }

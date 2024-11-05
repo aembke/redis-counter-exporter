@@ -13,8 +13,7 @@ use fred::{
   prelude::*,
   types::{ExpireOptions, Server},
 };
-use futures::{future::try_join_all, TryFutureExt};
-use log::{debug, error, trace};
+use log::{debug, error};
 use regex::Regex;
 use std::sync::Arc;
 
@@ -22,8 +21,9 @@ use std::sync::Arc;
 struct Shared {
   argv:     Arc<Argv>,
   counters: Arc<Counters>,
-  progress: Arc<Progress>,
   index:    Arc<Index>,
+  #[allow(dead_code)]
+  progress: Arc<Progress>,
 }
 
 async fn scan_node(state: Shared, server: Server, client: RedisClient) -> Result<(usize, usize), RedisError> {
@@ -168,8 +168,6 @@ async fn scan_node(state: Shared, server: Server, client: RedisClient) -> Result
   .await
 }
 
-// TODO support decrement and expire with replica scanning
-
 pub async fn index(
   argv: &Arc<Argv>,
   counters: &Arc<Counters>,
@@ -183,8 +181,9 @@ pub async fn index(
     progress: progress.clone(),
     index:    Index::new(&argv, extractors),
   };
+  debug!("Using extractors: {:?}", state.index.extractors());
   let mut tasks = Vec::with_capacity(nodes.len());
-  let jh = progress::watch_totals(&state.counters);
+  let totals_jh = progress::watch_totals(&state.counters);
 
   status!("Connecting to servers...");
   for node in nodes.into_iter() {
@@ -215,7 +214,7 @@ pub async fn index(
     }
   };
 
-  jh.abort();
+  totals_jh.abort();
   progress.update_totals(&counters);
   progress.totals.finish();
   Ok(state.index)

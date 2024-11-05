@@ -5,11 +5,10 @@ use clap::Parser;
 #[command(
   version,
   about,
-  long_about = "Utilities for inspecting a Redis keyspace via the SCAN command."
+  long_about = "Utilities for transferring counter data from Redis to PostgreSQL."
 )]
 #[command(propagate_version = true)]
 pub struct Argv {
-  // Shared Arguments
   /// The server hostname.
   #[arg(long = "redis-host", default_value = "127.0.0.1", value_name = "STRING")]
   pub redis_host:      String,
@@ -40,9 +39,9 @@ pub struct Argv {
   pub redis_reconnect: Option<u32>,
 
   // TLS Arguments
-  /// Whether to use TLS when connecting to Redis and PostgreSQL.
-  #[arg(long = "tls", default_value = "false")]
-  pub tls:         bool,
+  /// Whether to use TLS when connecting to Redis.
+  #[arg(long = "redis-tls", default_value = "false")]
+  pub redis_tls:   bool,
   /// A file path to the private key for a x509 identity used by the client.
   #[arg(long = "tls-key", value_name = "PATH")]
   pub tls_key:     Option<String>,
@@ -181,10 +180,10 @@ impl Argv {
 
   // there's gotta be a better way to do this
   pub fn fix(mut self) -> Self {
-    if self.tls_cert.is_some() || self.tls_key.is_some() || self.tls_ca_cert.is_some() {
-      self.tls = true;
+    // TODO support decrement and expire with replica scanning
+    if self.redis_replicas && (self.expire.is_some() || self.decr || self.reset) {
+      panic!("Replica scanning is not yet supported with expirations or counter modifications.");
     }
-
     if self.redis_replicas {
       self.redis_cluster = true;
     }

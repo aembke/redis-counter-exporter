@@ -9,7 +9,7 @@ use fred::{
   bytes::BytesMut,
   error::{RedisError, RedisErrorKind},
 };
-use log::{debug, error, trace};
+use log::{error, trace};
 use std::{cmp, error::Error, sync::Arc, time::Duration};
 use tokio_postgres::{
   types::{Format, IsNull, ToSql, Type},
@@ -118,7 +118,7 @@ pub async fn save(
   let now = Utc::now();
   let mut indexed = index.drain();
   let extractors = index.extractors();
-  while indexed.len() > 0 {
+  while !indexed.is_empty() {
     let batch_size = cmp::min(indexed.len(), argv.psql_batch as usize);
     let mut batch = Vec::with_capacity(batch_size);
     for _ in 0 .. batch_size {

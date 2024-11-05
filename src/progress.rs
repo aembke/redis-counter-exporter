@@ -4,10 +4,10 @@ use fred::{
   interfaces::{ClientLike, EventInterface},
   types::Server,
 };
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
-use log::{debug, error, trace};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use log::{debug, error};
 use once_cell::sync::Lazy;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::{
   borrow::Cow,
   collections::HashMap,
@@ -68,6 +68,7 @@ impl fmt::Display for Counters {
   }
 }
 
+#[allow(dead_code)]
 impl Counters {
   pub fn new() -> Arc<Self> {
     Arc::new(Counters {
@@ -295,6 +296,7 @@ impl Progress {
     }
   }
 
+  #[allow(dead_code)]
   pub fn remove_server(&self, server: &Server) {
     check_quiet!();
 
@@ -331,6 +333,7 @@ impl Progress {
     }
   }
 
+  #[allow(dead_code)]
   pub fn clear(&self) {
     check_quiet!();
 
