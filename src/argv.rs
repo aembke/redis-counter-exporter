@@ -1,5 +1,7 @@
 use crate::progress::{set_min_refresh_delay, set_quiet_output};
 use clap::Parser;
+use log::debug;
+use std::fs;
 
 #[derive(Parser, Debug, Clone, Default)]
 #[command(
@@ -166,6 +168,13 @@ pub struct Argv {
   /// A delay to wait between each batch insert to PostgreSQL.
   #[arg(long = "psql-delay", value_name = "NUMBER")]
   pub psql_delay:     Option<u64>,
+  /// A file or folder path containing SQL statements that should run before scanning or exporting. This is typically
+  /// used to conditionally create tables or indexes.
+  ///
+  /// If a folder path is provided the client will run the files according to their lexicographical sort. If a file
+  /// contains multiple statements they will be split by ";" and sent as separate queries.
+  #[arg(long = "psql-init", value_name = "PATH")]
+  pub psql_init:      Option<String>,
 }
 
 impl Argv {
@@ -209,5 +218,36 @@ impl Argv {
     }
 
     self
+  }
+
+  pub fn read_init_files(&self) -> Vec<String> {
+    if let Some(ref path) = self.psql_init {
+      debug!("Reading SQL init from {}", path);
+      let metadata = fs::metadata(path).unwrap();
+      if metadata.is_dir() {
+        let mut sorted: Vec<_> = fs::read_dir(path)
+          .unwrap()
+          .into_iter()
+          .map(|f| f.expect("Failed to inspect SQL file dir"))
+          .collect();
+        sorted.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+        sorted
+          .into_iter()
+          .flat_map(|file| {
+            let file = fs::read_to_string(file.path()).unwrap();
+            file
+              .split(";")
+              .into_iter()
+              .map(|s| format!("{};", s.trim()))
+              .collect::<Vec<_>>()
+          })
+          .collect()
+      } else {
+        vec![fs::read_to_string(&path).unwrap()]
+      }
+    } else {
+      Vec::new()
+    }
   }
 }

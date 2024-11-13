@@ -9,7 +9,7 @@ use fred::{
   bytes::BytesMut,
   error::{RedisError, RedisErrorKind},
 };
-use log::{error, trace};
+use log::{debug, error, trace};
 use std::{cmp, error::Error, sync::Arc, time::Duration};
 use tokio_postgres::{
   types::{Format, IsNull, ToSql, Type},
@@ -103,6 +103,24 @@ fn build_bindings(
   }
 
   Ok(out)
+}
+
+pub async fn init_sql(client: &Client, statements: Vec<String>) -> Result<(), RedisError> {
+  if statements.is_empty() {
+    return Ok(());
+  }
+  status!(format!("Running {} init statements...", statements.len()));
+
+  for statement in statements.into_iter() {
+    debug!("Running SQL init: {}", statement);
+    if let Err(e) = client.execute(&statement, &[]).await {
+      return Err(RedisError::new(
+        RedisErrorKind::Unknown,
+        format!("PostgreSQL init: {:?}", e),
+      ));
+    }
+  }
+  Ok(())
 }
 
 pub async fn save(

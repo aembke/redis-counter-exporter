@@ -77,6 +77,8 @@ async fn init_psql(argv: &Argv) -> Result<(Client, JoinHandle<PostgresResult>), 
     (client, jh)
   };
 
+  let init_files = argv.read_init_files();
+  exporter::init_sql(&client, init_files).await?;
   Ok((client, jh))
 }
 
