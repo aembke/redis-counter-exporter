@@ -9,7 +9,7 @@ declare -a targets=(
 
 for target in "${targets[@]}"
 do
-  Echo "Building for $target"
+  echo "Building for $target"
   cross build --release --bin redis-counter-exporter --target $target
 done
 
