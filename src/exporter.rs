@@ -7,7 +7,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use fred::{
   bytes::BytesMut,
-  error::{RedisError, RedisErrorKind},
+  error::{Error as RedisError, ErrorKind},
 };
 use log::{debug, error, trace};
 use std::{cmp, error::Error, sync::Arc, time::Duration};
@@ -114,10 +114,7 @@ pub async fn init_sql(client: &Client, statements: Vec<String>) -> Result<(), Re
   for statement in statements.into_iter() {
     debug!("Running SQL init: {}", statement);
     if let Err(e) = client.execute(&statement, &[]).await {
-      return Err(RedisError::new(
-        RedisErrorKind::Unknown,
-        format!("PostgreSQL init: {:?}", e),
-      ));
+      return Err(RedisError::new(ErrorKind::Unknown, format!("PostgreSQL init: {:?}", e)));
     }
   }
   Ok(())
@@ -157,7 +154,7 @@ pub async fn save(
       if argv.ignore {
         continue;
       } else {
-        return Err(RedisError::new(RedisErrorKind::Unknown, format!("{:?}", e)));
+        return Err(RedisError::new(ErrorKind::Unknown, format!("{:?}", e)));
       }
     }
 

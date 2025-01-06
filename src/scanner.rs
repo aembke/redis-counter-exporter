@@ -8,10 +8,10 @@ use crate::{
   ClusterNode,
 };
 use fred::{
-  clients::RedisClient,
-  error::RedisError,
+  clients::Client,
+  error::Error,
   prelude::*,
-  types::{ExpireOptions, Server},
+  types::{config::Server, ExpireOptions},
 };
 use log::{debug, error};
 use regex::Regex;
@@ -26,7 +26,7 @@ struct Shared {
   progress: Arc<Progress>,
 }
 
-async fn scan_node(state: Shared, server: Server, client: RedisClient) -> Result<(usize, usize), RedisError> {
+async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usize, usize), Error> {
   let scanner = client.scan(state.argv.pattern.clone(), Some(state.argv.page_size), None);
   let filter = state.argv.filter.as_ref().and_then(|s| Regex::new(s).ok());
   let reject = state.argv.reject.as_ref().and_then(|s| Regex::new(s).ok());
@@ -173,7 +173,7 @@ pub async fn index(
   counters: &Arc<Counters>,
   progress: &Arc<Progress>,
   nodes: Vec<ClusterNode>,
-) -> Result<Arc<Index>, RedisError> {
+) -> Result<Arc<Index>, Error> {
   let extractors = Extractor::from_argv(&argv);
   let state = Shared {
     argv:     argv.clone(),

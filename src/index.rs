@@ -1,7 +1,7 @@
 use crate::{argv::Argv, utils};
 use fred::{
-  error::{RedisError, RedisErrorKind},
-  types::RedisKey,
+  error::{Error, ErrorKind},
+  types::Key as RedisKey,
 };
 use parking_lot::Mutex;
 use regex::Regex;
@@ -126,7 +126,7 @@ impl Index {
     })
   }
 
-  pub fn upsert(&self, key: &RedisKey, value: u64) -> Result<bool, RedisError> {
+  pub fn upsert(&self, key: &RedisKey, value: u64) -> Result<bool, Error> {
     let mut parts = Vec::with_capacity(self.extractors.len());
     for extractor in self.extractors.iter() {
       if let Some(group) = utils::regexp_capture(&extractor.regex, key, &self.delimiter) {
@@ -134,8 +134,8 @@ impl Index {
       } else if self.filter_missing {
         return Ok(false);
       } else {
-        return Err(RedisError::new(
-          RedisErrorKind::Unknown,
+        return Err(Error::new(
+          ErrorKind::Unknown,
           "Missing group to extract from Redis key.",
         ));
       }

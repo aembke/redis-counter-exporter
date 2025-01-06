@@ -4,15 +4,15 @@ use crate::{
 };
 use clap::Parser;
 use fred::{
-  clients::RedisClient,
-  error::RedisError,
-  prelude::RedisErrorKind,
-  types::{Builder, Server},
+  clients::Client,
+  error::Error,
+  prelude::ErrorKind,
+  types::{config::Server, Builder},
 };
 use log::{debug, log_enabled, trace, Level};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tokio_postgres::{error::Error as PostgresError, Client, NoTls};
+use tokio_postgres::{error::Error as PostgresError, Client as PSQLClient, NoTls};
 
 mod argv;
 mod exporter;
@@ -31,13 +31,12 @@ pub(crate) struct ClusterNode {
 type PostgresResult = Result<(), PostgresError>;
 
 /// Initialize the client and discover any other servers to be scanned.
-async fn init_redis(argv: &Argv) -> Result<(RedisClient, Vec<ClusterNode>), RedisError> {
+async fn init_redis(argv: &Argv) -> Result<(Client, Vec<ClusterNode>), Error> {
   debug!("Connecting to Redis...");
   status!("Discovering servers...");
 
   let (builder, client) = utils::init(argv).await?;
-  let nodes = utils::discover_servers(argv, &client)
-    .await?
+  let nodes = utils::discover_servers(argv, &client)?
     .into_iter()
     .map(|server| {
       let builder = utils::change_builder_server(&builder, &server)?;
@@ -47,7 +46,7 @@ async fn init_redis(argv: &Argv) -> Result<(RedisClient, Vec<ClusterNode>), Redi
         readonly: argv.redis_replicas,
       })
     })
-    .collect::<Result<Vec<_>, RedisError>>()?;
+    .collect::<Result<Vec<_>, Error>>()?;
 
   if log_enabled!(Level::Debug) {
     let servers: Vec<_> = nodes.iter().map(|s| format!("{}", s.server)).collect();
@@ -56,7 +55,7 @@ async fn init_redis(argv: &Argv) -> Result<(RedisClient, Vec<ClusterNode>), Redi
   Ok((client, nodes))
 }
 
-async fn init_psql(argv: &Argv) -> Result<(Client, JoinHandle<PostgresResult>), RedisError> {
+async fn init_psql(argv: &Argv) -> Result<(PSQLClient, JoinHandle<PostgresResult>), Error> {
   let conn_str = format!(
     "host={} port={} user={} password={} dbname={} keepalives=1 keepalives_idle=30",
     argv.psql_host, argv.psql_port, argv.psql_user, argv.psql_password, argv.psql_db
@@ -66,13 +65,13 @@ async fn init_psql(argv: &Argv) -> Result<(Client, JoinHandle<PostgresResult>), 
   let (client, jh) = if let Some(tls) = utils::build_postgres_tls(argv)? {
     let (client, connection) = tokio_postgres::connect(&conn_str, tls)
       .await
-      .map_err(|e| RedisError::new(RedisErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
+      .map_err(|e| Error::new(ErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
     let jh = utils::watch_psql_task(connection, argv.quiet);
     (client, jh)
   } else {
     let (client, connection) = tokio_postgres::connect(&conn_str, NoTls)
       .await
-      .map_err(|e| RedisError::new(RedisErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
+      .map_err(|e| Error::new(ErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
     let jh = utils::watch_psql_task(connection, argv.quiet);
     (client, jh)
   };
@@ -83,7 +82,7 @@ async fn init_psql(argv: &Argv) -> Result<(Client, JoinHandle<PostgresResult>), 
 }
 
 #[tokio::main]
-async fn main() -> Result<(), RedisError> {
+async fn main() -> Result<(), Error> {
   pretty_env_logger::try_init_timed().expect("Failed to initialize logger");
 
   let argv = Arc::new(Argv::parse().fix());
