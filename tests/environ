@@ -10,7 +10,9 @@ if [ -z "$CARGO_HTTP_DEBUG" ]; then
 fi
 
 export PSQL_USERNAME="foo" \
-       PSQL_PASSWORD="bar"
+       PSQL_PASSWORD="bar" \
+       REDIS_USERNAME="foo" \
+       REDIS_PASSWORD="bar"
 
 REDIS_CLI_PATH="$PWD/tests/tmp/redis_$REDIS_VERSION/redis-$REDIS_VERSION/src/redis-cli"
 read -p "Build redis-cli for Redis $REDIS_VERSION? [y/n]: " INSTALL_CLI

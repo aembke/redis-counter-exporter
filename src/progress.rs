@@ -1,8 +1,8 @@
 use crate::{progress, utils};
 use fred::{
-  clients::RedisClient,
+  clients::Client,
   interfaces::{ClientLike, EventInterface},
-  types::Server,
+  types::config::Server,
 };
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use log::{debug, error};
@@ -349,7 +349,7 @@ impl Progress {
   }
 }
 
-pub fn setup_event_logs(client: &RedisClient) -> JoinHandle<()> {
+pub fn setup_event_logs(client: &Client) -> JoinHandle<()> {
   let client = client.clone();
 
   tokio::spawn(async move {

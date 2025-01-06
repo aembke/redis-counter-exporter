@@ -9,16 +9,9 @@ use fred::{
   cmd,
   prelude::*,
   types::{
+    config::{ClusterDiscoveryPolicy, Config, ReplicaConfig, Server, ServerConfig, TlsConnector, UnresponsiveConfig},
+    scan::{ScanResult, Scanner},
     Builder,
-    ClusterDiscoveryPolicy,
-    RedisConfig,
-    ReplicaConfig,
-    ScanResult,
-    Scanner,
-    Server,
-    ServerConfig,
-    TlsConnector,
-    UnresponsiveConfig,
   },
 };
 use futures::{
@@ -27,7 +20,7 @@ use futures::{
   Stream,
   TryStreamExt,
 };
-use log::{debug, error, log_enabled, trace, warn};
+use log::{debug, error, log_enabled, trace};
 use openssl::{
   pkey::PKey,
   ssl::{SslConnector, SslMethod},
@@ -65,11 +58,11 @@ pub fn set_atomic(val: &AtomicUsize, amt: usize) -> usize {
   val.swap(amt, Ordering::SeqCst)
 }
 
-fn map_tls_error<E: Debug>(e: E) -> RedisError {
-  RedisError::new(RedisErrorKind::Tls, format!("{:?}", e))
+fn map_tls_error<E: Debug>(e: E) -> Error {
+  Error::new(ErrorKind::Tls, format!("{:?}", e))
 }
 
-fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, RedisError> {
+fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, Error> {
   use fred::native_tls::{Certificate, Identity, TlsConnector};
 
   if argv.redis_tls {
@@ -109,7 +102,7 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, RedisError> {
   }
 }
 
-pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, RedisError> {
+pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error> {
   if argv.psql_tls {
     let mut builder = SslConnector::builder(SslMethod::tls()).map_err(map_tls_error)?;
 
@@ -173,7 +166,7 @@ where
 }
 
 /// Discover any other servers that should be scanned.
-pub async fn discover_servers(argv: &Argv, client: &RedisClient) -> Result<Vec<Server>, RedisError> {
+pub fn discover_servers(argv: &Argv, client: &Client) -> Result<Vec<Server>, Error> {
   let config = client.client_config();
 
   Ok(if client.is_clustered() {
@@ -181,7 +174,7 @@ pub async fn discover_servers(argv: &Argv, client: &RedisClient) -> Result<Vec<S
     let primary_nodes = client
       .cached_cluster_state()
       .map(|state| state.unique_primary_nodes())
-      .ok_or_else(|| RedisError::new(RedisErrorKind::Config, "Missing cluster state."))?;
+      .ok_or_else(|| Error::new(ErrorKind::Config, "Missing cluster state."))?;
 
     if argv.redis_replicas {
       // pick one replica per primary node
@@ -196,7 +189,7 @@ pub async fn discover_servers(argv: &Argv, client: &RedisClient) -> Result<Vec<S
       primary_nodes
     }
   } else if config.server.is_sentinel() {
-    client.active_connections().await?
+    client.active_connections()
   } else {
     config.server.hosts()
   })
@@ -204,7 +197,7 @@ pub async fn discover_servers(argv: &Argv, client: &RedisClient) -> Result<Vec<S
 
 /// Create a new `Builder` instance by replacing the destination server with a centralized server config to the
 /// provided `server`.
-pub fn change_builder_server(builder: &Builder, server: &Server) -> Result<Builder, RedisError> {
+pub fn change_builder_server(builder: &Builder, server: &Server) -> Result<Builder, Error> {
   let config = builder
     .get_config()
     .map(|config| {
@@ -212,7 +205,7 @@ pub fn change_builder_server(builder: &Builder, server: &Server) -> Result<Build
       config.server = ServerConfig::Centralized { server: server.clone() };
       config
     })
-    .ok_or_else(|| RedisError::new(RedisErrorKind::Config, "Invalid client builder."))?;
+    .ok_or_else(|| Error::new(ErrorKind::Config, "Invalid client builder."))?;
 
   let mut out = Builder::from_config(config);
   out.set_connection_config(builder.get_connection_config().clone());
@@ -224,7 +217,7 @@ pub fn change_builder_server(builder: &Builder, server: &Server) -> Result<Build
 }
 
 /// Create a client builder and the initial connection to the server.
-pub async fn init(argv: &Argv) -> Result<(Builder, RedisClient), RedisError> {
+pub async fn init(argv: &Argv) -> Result<(Builder, Client), Error> {
   let server = if argv.redis_cluster || argv.redis_replicas {
     ServerConfig::Clustered {
       hosts:  vec![Server::new(&argv.redis_host, argv.redis_port)],
@@ -235,7 +228,7 @@ pub async fn init(argv: &Argv) -> Result<(Builder, RedisClient), RedisError> {
       server: Server::new(&argv.redis_host, argv.redis_port),
     }
   };
-  let config = RedisConfig {
+  let config = Config {
     server,
     tls: build_tls_config(argv)?.map(|t| t.into()),
     username: argv.redis_username.clone(),
@@ -257,7 +250,6 @@ pub async fn init(argv: &Argv) -> Result<(Builder, RedisClient), RedisError> {
         lazy_connections: true,
         primary_fallback: true,
         ignore_reconnection_errors: true,
-        connection_error_count: 1,
         ..Default::default()
       };
     }
@@ -271,7 +263,7 @@ pub async fn init(argv: &Argv) -> Result<(Builder, RedisClient), RedisError> {
   Ok((builder, client))
 }
 
-pub async fn update_estimate(server: Server, client: RedisClient) -> Result<(), RedisError> {
+pub async fn update_estimate(server: Server, client: Client) -> Result<(), Error> {
   loop {
     tokio::time::sleep(DEFAULT_ESTIMATE_UPDATE_INTERVAL).await;
 
@@ -281,7 +273,7 @@ pub async fn update_estimate(server: Server, client: RedisClient) -> Result<(), 
   }
 }
 
-pub async fn check_readonly(node: &ClusterNode, client: &RedisClient) -> Result<(), RedisError> {
+pub async fn check_readonly(node: &ClusterNode, client: &Client) -> Result<(), Error> {
   if node.readonly {
     client.custom::<(), ()>(cmd!("READONLY"), vec![]).await?;
   }
@@ -290,7 +282,7 @@ pub async fn check_readonly(node: &ClusterNode, client: &RedisClient) -> Result<
 }
 
 /// Returns whether the key should be skipped based on the argv `filter` and `reject` expressions.
-pub fn should_skip_key_by_regexp(filter: &Option<Regex>, reject: &Option<Regex>, key: &RedisKey) -> bool {
+pub fn should_skip_key_by_regexp(filter: &Option<Regex>, reject: &Option<Regex>, key: &Key) -> bool {
   let matches_filter = if let Some(ref regex) = filter {
     regexp_match(regex, key)
   } else {
@@ -306,7 +298,7 @@ pub fn should_skip_key_by_regexp(filter: &Option<Regex>, reject: &Option<Regex>,
 }
 
 /// Returns whether the key matches the provided regexp.
-pub fn regexp_match(regex: &Regex, key: &RedisKey) -> bool {
+pub fn regexp_match(regex: &Regex, key: &Key) -> bool {
   let key_str = key.as_str_lossy();
   if log_enabled!(log::Level::Trace) {
     trace!(
@@ -320,7 +312,7 @@ pub fn regexp_match(regex: &Regex, key: &RedisKey) -> bool {
 }
 
 /// Returns whether the key matches the provided regexp.
-pub fn regexp_capture(regex: &Regex, key: &RedisKey, delimiter: &str) -> Option<String> {
+pub fn regexp_capture(regex: &Regex, key: &Key, delimiter: &str) -> Option<String> {
   let key_str = key.as_str_lossy();
   let out: Vec<String> = regex
     .captures(key_str.as_ref())
@@ -349,12 +341,12 @@ pub async fn scan_server<F, Fut>(
   server: Server,
   ignore: bool,
   delay: u64,
-  scanner: impl Stream<Item = Result<ScanResult, RedisError>>,
+  scanner: impl Stream<Item = Result<ScanResult, Error>>,
   func: F,
-) -> Result<(usize, usize), RedisError>
+) -> Result<(usize, usize), Error>
 where
-  Fut: Future<Output = Result<(usize, usize, usize, usize), RedisError>>,
-  F: Fn(usize, usize, usize, usize, Vec<RedisKey>) -> Fut,
+  Fut: Future<Output = Result<(usize, usize, usize, usize), Error>>,
+  F: Fn(usize, usize, usize, usize, Vec<Key>) -> Fut,
 {
   let mut last_error = None;
   let (mut local_scanned, mut local_success, mut local_skipped, mut local_errored) = (0, 0, 0, 0);
@@ -402,10 +394,7 @@ where
       Some(local_scanned as u64),
     );
 
-    if let Err(e) = page.next() {
-      // the more useful error shows up on the next try_next() call
-      warn!("Error trying to scan next page: {:?}", e);
-    }
+    page.next();
   }
 
   if let Some(error) = last_error {
@@ -434,7 +423,7 @@ where
   }
 }
 
-pub async fn wait_with_interrupts(ops: Vec<JoinHandle<Result<(), RedisError>>>) -> Result<(), RedisError> {
+pub async fn wait_with_interrupts(ops: Vec<JoinHandle<Result<(), Error>>>) -> Result<(), Error> {
   let ctrl_c_ft = tokio::signal::ctrl_c();
   let ops_ft = try_join_all(ops);
   pin!(ctrl_c_ft);
