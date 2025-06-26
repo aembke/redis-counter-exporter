@@ -10,11 +10,11 @@ use fred::{
   error::{Error as RedisError, ErrorKind},
 };
 use log::{debug, error, trace};
+use r2d2_postgres::r2d2;
 use std::{cmp, error::Error, sync::Arc, time::Duration};
-use tokio_postgres::{
-  types::{Format, IsNull, ToSql, Type},
-  Client,
-};
+use tokio_postgres::tls::MakeTlsConnect;
+use tokio_postgres::types::{Format, IsNull, ToSql, Type};
+use tokio_postgres::Socket;
 
 #[derive(Debug)]
 enum Param {
@@ -63,11 +63,11 @@ fn build_sql(argv: &Argv, extractors: &[Extractor], values_len: usize) -> String
   let columns: Vec<String> = extractors.iter().map(|e| e.name.clone()).collect();
   let mut values: Vec<String> = Vec::with_capacity(values_len);
   let mut sql_idx = 1;
-  for _ in 0 .. values_len {
+  for _ in 0..values_len {
     let mut inner = Vec::with_capacity(extractors.len() + 2);
     inner.push(format!("${}", sql_idx));
     inner.push(format!("${}", sql_idx + 1));
-    for i in 0 .. extractors.len() {
+    for i in 0..extractors.len() {
       inner.push(format!("${}", sql_idx + i + 2));
     }
 
@@ -105,7 +105,16 @@ fn build_bindings(
   Ok(out)
 }
 
-pub async fn init_sql(client: &Client, statements: Vec<String>) -> Result<(), RedisError> {
+pub async fn init_sql<T>(
+  pool: r2d2::Pool<r2d2_postgres::PostgresConnectionManager<T>>,
+  statements: Vec<String>,
+) -> Result<(), RedisError>
+where
+  T: Clone + MakeTlsConnect<Socket> + Send + Sync + 'static,
+  <T as MakeTlsConnect<Socket>>::Stream: Send + Sync + 'static,
+  <T as MakeTlsConnect<Socket>>::TlsConnect: Send + Sync,
+  <<T as MakeTlsConnect<Socket>>::TlsConnect as tokio_postgres::tls::TlsConnect<Socket>>::Future: Send,
+{
   if statements.is_empty() {
     return Ok(());
   }
@@ -113,19 +122,28 @@ pub async fn init_sql(client: &Client, statements: Vec<String>) -> Result<(), Re
 
   for statement in statements.into_iter() {
     debug!("Running SQL init: {}", statement);
-    if let Err(e) = client.execute(&statement, &[]).await {
+    let mut client = pool
+      .get()
+      .map_err(|e| RedisError::new(ErrorKind::Unknown, format!("PostgreSQL connection error: {:?}", e)))?;
+    if let Err(e) = client.execute(&statement, &[]) {
       return Err(RedisError::new(ErrorKind::Unknown, format!("PostgreSQL init: {:?}", e)));
     }
   }
   Ok(())
 }
 
-pub async fn save(
+pub async fn save<T>(
   argv: &Arc<Argv>,
   progress: &Arc<Progress>,
   index: Arc<Index>,
-  client: Client,
-) -> Result<(), RedisError> {
+  pool: r2d2::Pool<r2d2_postgres::PostgresConnectionManager<T>>,
+) -> Result<(), RedisError>
+where
+  T: Clone + MakeTlsConnect<Socket> + Send + Sync + 'static,
+  <T as MakeTlsConnect<Socket>>::Stream: Send + Sync + 'static,
+  <T as MakeTlsConnect<Socket>>::TlsConnect: Send + Sync,
+  <<T as MakeTlsConnect<Socket>>::TlsConnect as tokio_postgres::tls::TlsConnect<Socket>>::Future: Send,
+{
   let index_len = index.len();
   status!(format!("Saving {} results...", index_len));
   progress.set_postgres_estimate(index_len as u64);
@@ -136,7 +154,7 @@ pub async fn save(
   while !indexed.is_empty() {
     let batch_size = cmp::min(indexed.len(), argv.psql_batch as usize);
     let mut batch = Vec::with_capacity(batch_size);
-    for _ in 0 .. batch_size {
+    for _ in 0..batch_size {
       batch.push(indexed.pop().unwrap());
     }
     let sql = build_sql(&argv, extractors, batch.len());
@@ -144,7 +162,10 @@ pub async fn save(
     trace!("Sending SQL: {}, with bindings: {:?}", sql, bindings);
     let params: Vec<_> = bindings.iter().map(|s| s as &(dyn ToSql + Sync)).collect();
 
-    if let Err(e) = client.execute(&sql, params.as_slice()).await {
+    let mut client = pool
+      .get()
+      .map_err(|e| RedisError::new(ErrorKind::Unknown, format!("PostgreSQL connection error: {:?}", e)))?;
+    if let Err(e) = client.execute(&sql, params.as_slice()) {
       error!("Error writing to PostgreSQL: {:?}", e);
       if argv.quiet {
         eprintln!("Error writing to PostgreSQL: {:?}", e);
