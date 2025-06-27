@@ -162,9 +162,23 @@ where
     trace!("Sending SQL: {}, with bindings: {:?}", sql, bindings);
     let params: Vec<_> = bindings.iter().map(|s| s as &(dyn ToSql + Sync)).collect();
 
+    let mut attempt = 0;
     let mut client = pool
       .get()
       .map_err(|e| RedisError::new(ErrorKind::Unknown, format!("PostgreSQL connection error: {:?}", e)))?;
+
+    while client.is_closed() && attempt < argv.psql_pool_acquire_retry {
+      attempt += 1;
+      if argv.quiet {
+        eprintln!("PostgreSQL connection closed, retrying...");
+      } else {
+        status!("PostgreSQL connection closed, retrying...");
+      }
+      client = pool
+        .get()
+        .map_err(|e| RedisError::new(ErrorKind::Unknown, format!("PostgreSQL connection error: {:?}", e)))?;
+    }
+
     if let Err(e) = client.execute(&sql, params.as_slice()) {
       error!("Error writing to PostgreSQL: {:?}", e);
       if argv.quiet {
