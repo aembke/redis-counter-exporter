@@ -168,6 +168,9 @@ pub struct Argv {
   /// A delay to wait between each batch insert to PostgreSQL.
   #[arg(long = "psql-delay", value_name = "NUMBER")]
   pub psql_delay:     Option<u64>,
+  /// The number of times to retry acquiring a connection from the PostgreSQL pool before giving up.
+  #[arg(long = "psql-pool-acquire-retry", value_name = "NUMBER", default_value = "5")]
+  pub psql_pool_acquire_retry: u32,
   /// A file or folder path containing SQL statements that should run before scanning or exporting. This is typically
   /// used to conditionally create tables or indexes.
   ///
