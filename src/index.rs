@@ -37,9 +37,9 @@ impl From<&str> for ColumnKind {
 
 #[derive(Debug)]
 pub struct Extractor {
-  pub kind:  ColumnKind,
+  pub kind: ColumnKind,
   pub regex: Regex,
-  pub name:  String,
+  pub name: String,
 }
 
 impl Ord for Extractor {
@@ -102,10 +102,10 @@ impl Hash for Key {
 }
 
 pub struct Index {
-  delimiter:      String,
+  delimiter: String,
   filter_missing: bool,
-  extractors:     Vec<Extractor>,
-  inner:          Mutex<HashMap<Key, u64>>,
+  extractors: Vec<Extractor>,
+  inner: Mutex<HashMap<Key, u64>>,
 }
 
 impl fmt::Debug for Index {

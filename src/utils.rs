@@ -1,8 +1,6 @@
 use crate::{
   argv::Argv,
-  progress,
   progress::{global_progress, min_refresh_delay},
-  status,
   ClusterNode,
 };
 use fred::{
@@ -16,9 +14,7 @@ use fred::{
 };
 use futures::{
   future::{select, try_join_all, Either},
-  pin_mut,
-  Stream,
-  TryStreamExt,
+  pin_mut, Stream, TryStreamExt,
 };
 use log::{debug, error, log_enabled, trace};
 use openssl::{
@@ -36,13 +32,7 @@ use std::{
   sync::atomic::{AtomicUsize, Ordering},
   time::Duration as StdDuration,
 };
-use tokio::{
-  io::{AsyncRead, AsyncWrite},
-  pin,
-  task::JoinHandle,
-  time::sleep,
-};
-use tokio_postgres::{error::Error as PostgresError, Connection, Socket};
+use tokio::{pin, task::JoinHandle, time::sleep};
 
 pub const DEFAULT_ESTIMATE_UPDATE_INTERVAL: StdDuration = StdDuration::from_millis(2500);
 
@@ -147,24 +137,6 @@ pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error
   }
 }
 
-pub fn watch_psql_task<T>(connection: Connection<Socket, T>, quiet: bool) -> JoinHandle<Result<(), PostgresError>>
-where
-  T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-  tokio::spawn(async move {
-    if let Err(e) = connection.await {
-      if quiet {
-        eprintln!("PostgreSQL connection error: {}", e);
-      } else {
-        status!(format!("PostgreSQL connection error: {}", e));
-      }
-      Err(e)
-    } else {
-      Ok::<_, PostgresError>(())
-    }
-  })
-}
-
 /// Discover any other servers that should be scanned.
 pub fn discover_servers(argv: &Argv, client: &Client) -> Result<Vec<Server>, Error> {
   let config = client.client_config();
@@ -220,7 +192,7 @@ pub fn change_builder_server(builder: &Builder, server: &Server) -> Result<Build
 pub async fn init(argv: &Argv) -> Result<(Builder, Client), Error> {
   let server = if argv.redis_cluster || argv.redis_replicas {
     ServerConfig::Clustered {
-      hosts:  vec![Server::new(&argv.redis_host, argv.redis_port)],
+      hosts: vec![Server::new(&argv.redis_host, argv.redis_port)],
       policy: ClusterDiscoveryPolicy::ConfigEndpoint,
     }
   } else {
@@ -242,7 +214,7 @@ pub async fn init(argv: &Argv) -> Result<(Builder, Client), Error> {
   builder.with_connection_config(|config| {
     config.unresponsive = UnresponsiveConfig {
       max_timeout: Some(StdDuration::from_millis(10_000)),
-      interval:    StdDuration::from_millis(2_000),
+      interval: StdDuration::from_millis(2_000),
     };
 
     if argv.redis_replicas {
@@ -319,7 +291,7 @@ pub fn regexp_capture(regex: &Regex, key: &Key, delimiter: &str) -> Option<Strin
     .iter()
     .flat_map(|s| {
       let mut out = Vec::with_capacity(s.len() - 1);
-      for i in 0 .. s.len() - 1 {
+      for i in 0..s.len() - 1 {
         if let Some(val) = s.get(i + 1) {
           out.push(val.as_str().to_string());
         }

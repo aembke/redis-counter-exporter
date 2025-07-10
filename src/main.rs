@@ -3,16 +3,15 @@ use crate::{
   progress::{Counters, Progress},
 };
 use clap::Parser;
+use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use fred::{
   clients::Client,
   error::Error,
-  prelude::ErrorKind,
   types::{config::Server, Builder},
 };
 use log::{debug, log_enabled, trace, Level};
-use std::sync::Arc;
-use tokio::task::JoinHandle;
-use tokio_postgres::{error::Error as PostgresError, Client as PSQLClient, NoTls};
+use std::{sync::Arc, time::Duration};
+use tokio_postgres::NoTls;
 
 mod argv;
 mod exporter;
@@ -23,12 +22,10 @@ mod utils;
 
 /// A cluster node identifier and any information necessary to connect to it.
 pub(crate) struct ClusterNode {
-  pub server:   Server,
-  pub builder:  Builder,
+  pub server: Server,
+  pub builder: Builder,
   pub readonly: bool,
 }
-
-type PostgresResult = Result<(), PostgresError>;
 
 /// Initialize the client and discover any other servers to be scanned.
 async fn init_redis(argv: &Argv) -> Result<(Client, Vec<ClusterNode>), Error> {
@@ -55,34 +52,40 @@ async fn init_redis(argv: &Argv) -> Result<(Client, Vec<ClusterNode>), Error> {
   Ok((client, nodes))
 }
 
-async fn init_psql(argv: &Argv) -> Result<(PSQLClient, JoinHandle<PostgresResult>), Error> {
-  let conn_str = format!(
-    "host={} port={} user={} password={} dbname={} keepalives=1 keepalives_idle=30",
-    argv.psql_host, argv.psql_port, argv.psql_user, argv.psql_password, argv.psql_db
-  );
-
-  trace!("Connecting to PostgreSQL: {}", conn_str);
-  let (client, jh) = if let Some(tls) = utils::build_postgres_tls(argv)? {
-    let (client, connection) = tokio_postgres::connect(&conn_str, tls)
-      .await
-      .map_err(|e| Error::new(ErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
-    let jh = utils::watch_psql_task(connection, argv.quiet);
-    (client, jh)
-  } else {
-    let (client, connection) = tokio_postgres::connect(&conn_str, NoTls)
-      .await
-      .map_err(|e| Error::new(ErrorKind::IO, format!("PostgreSQL: {:?}", e)))?;
-    let jh = utils::watch_psql_task(connection, argv.quiet);
-    (client, jh)
+async fn init_psql_pool(argv: &Argv) -> anyhow::Result<Pool> {
+  let mut pg_config = tokio_postgres::Config::new();
+  pg_config
+    .host(argv.psql_host.as_str())
+    .port(argv.psql_port)
+    .user(argv.psql_user.as_str())
+    .password(argv.psql_password.as_str())
+    .dbname(argv.psql_db.as_str())
+    .keepalives(true)
+    .keepalives_idle(Duration::from_secs(30));
+  trace!("Connecting to PostgreSQL: {:?}", &pg_config);
+  let mgr_config = ManagerConfig {
+    recycling_method: RecyclingMethod::Fast,
   };
 
+  let mgr = if let Some(tls) = utils::build_postgres_tls(argv)? {
+    Manager::from_config(pg_config, tls, mgr_config)
+  } else {
+    Manager::from_config(pg_config, NoTls, mgr_config)
+  };
+
+  let pool = Pool::builder(mgr).max_size(argv.psql_pool_size).build()?;
+  let client = pool
+    .get()
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to get PostgreSQL client from pool: {:?}", e))?;
   let init_files = argv.read_init_files();
   exporter::init_sql(&client, init_files).await?;
-  Ok((client, jh))
+
+  Ok(pool)
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> anyhow::Result<()> {
   pretty_env_logger::try_init_timed().expect("Failed to initialize logger");
 
   let argv = Arc::new(Argv::parse().fix());
@@ -92,7 +95,9 @@ async fn main() -> Result<(), Error> {
     openssl::init();
   }
   let (_, nodes) = init_redis(&argv).await.expect("Failed to initialize Redis client");
-  let (psql_client, psql_conn) = init_psql(&argv).await.expect("Failed to initialize PostgreSQL client");
+  let psql_pool = init_psql_pool(&argv)
+    .await
+    .expect("Failed to initialize PostgreSQL connection pool");
 
   let progress = Arc::new(Progress::default());
   let counters = Arc::new(Counters::new());
@@ -125,9 +130,8 @@ async fn main() -> Result<(), Error> {
         }
       }
     });
-    exporter::save(&argv, &progress, index, psql_client).await?;
+    exporter::save(&argv, &progress, index, psql_pool).await?;
     sigint_task.abort();
-    psql_conn.abort();
   } else if argv.quiet {
     println!("Skip saving to PostgreSQL during dry run.");
   } else {
