@@ -64,7 +64,8 @@ async fn init_psql_pool(argv: &Argv) -> anyhow::Result<Pool> {
     .keepalives_idle(Duration::from_secs(30));
   trace!("Connecting to PostgreSQL: {:?}", &pg_config);
   let mgr_config = ManagerConfig {
-    recycling_method: RecyclingMethod::Fast,
+    // guarantees that the database connection is ready to be used
+    recycling_method: RecyclingMethod::Verified,
   };
 
   let mgr = if let Some(tls) = utils::build_postgres_tls(argv)? {

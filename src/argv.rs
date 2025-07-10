@@ -223,7 +223,6 @@ impl Argv {
     self
   }
 
-  #[allow(dead_code)]
   pub fn read_init_files(&self) -> Vec<String> {
     if let Some(ref path) = self.psql_init {
       debug!("Reading SQL init from {}", path);
