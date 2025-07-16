@@ -153,7 +153,7 @@ macro_rules! status {
 }
 
 pub struct ServerBars {
-  pub bars:    HashMap<Server, ProgressBar>,
+  pub bars: HashMap<Server, ProgressBar>,
   pub updated: HashMap<Server, Instant>,
 }
 
@@ -198,10 +198,10 @@ impl ServerBars {
 }
 
 pub struct Progress {
-  pub multi:    MultiProgress,
-  pub bars:     RwLock<ServerBars>,
-  pub status:   ProgressBar,
-  pub totals:   ProgressBar,
+  pub multi: MultiProgress,
+  pub bars: RwLock<ServerBars>,
+  pub status: ProgressBar,
+  pub totals: ProgressBar,
   pub postgres: RwLock<Option<ProgressBar>>,
 }
 
@@ -209,7 +209,7 @@ impl Default for Progress {
   fn default() -> Self {
     let multi = MultiProgress::new();
     let bars = RwLock::new(ServerBars {
-      bars:    HashMap::new(),
+      bars: HashMap::new(),
       updated: HashMap::new(),
     });
 

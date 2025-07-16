@@ -3,9 +3,7 @@ use crate::{
   index::{Extractor, Index},
   progress,
   progress::{global_progress, setup_event_logs, Counters, Progress},
-  status,
-  utils,
-  ClusterNode,
+  status, utils, ClusterNode,
 };
 use fred::{
   clients::Client,
@@ -19,9 +17,9 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 struct Shared {
-  argv:     Arc<Argv>,
+  argv: Arc<Argv>,
   counters: Arc<Counters>,
-  index:    Arc<Index>,
+  index: Arc<Index>,
   #[allow(dead_code)]
   progress: Arc<Progress>,
 }
@@ -37,7 +35,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
     state.argv.ignore,
     state.argv.redis_delay,
     scanner,
-    move |mut scanned, mut success, mut skipped, mut errored, keys| {
+    move |mut scanned, mut success, mut skipped, mut _errored, keys| {
       let (filter, reject, client, server, state) = (
         filter.clone(),
         reject.clone(),
@@ -81,7 +79,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
               error!("{} Error calling GET or GETSET: {:?}", server, e);
 
               if state.argv.ignore {
-                return Ok((scanned, success, skipped, errored));
+                return Ok((scanned, success, skipped, _errored));
               } else {
                 return Err(e);
               }
@@ -107,7 +105,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
                 Err(e) => {
                   if !state.argv.ignore {
                     state.counters.incr_errored(1);
-                    errored += 1;
+                    _errored += 1;
                     return Err(e);
                   } else {
                     state.counters.incr_skipped(1);
@@ -129,7 +127,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
               if let Err(e) = pipeline.last::<()>().await {
                 if !state.argv.ignore {
                   state.counters.incr_errored(1);
-                  errored += 1;
+                  _errored += 1;
                   return Err(e);
                 } else {
                   state.counters.incr_skipped(1);
@@ -150,7 +148,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
               if let Err(e) = pipeline.last::<()>().await {
                 if !state.argv.ignore {
                   state.counters.incr_errored(1);
-                  errored += 1;
+                  _errored += 1;
                   return Err(e);
                 } else {
                   state.counters.incr_skipped(1);
@@ -161,7 +159,7 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
           }
         }
 
-        Ok((scanned, success, skipped, errored))
+        Ok((scanned, success, skipped, _errored))
       }
     },
   )
@@ -176,10 +174,10 @@ pub async fn index(
 ) -> Result<Arc<Index>, Error> {
   let extractors = Extractor::from_argv(&argv);
   let state = Shared {
-    argv:     argv.clone(),
+    argv: argv.clone(),
     counters: counters.clone(),
     progress: progress.clone(),
-    index:    Index::new(&argv, extractors),
+    index: Index::new(&argv, extractors),
   };
   debug!("Using extractors: {:?}", state.index.extractors());
   let mut tasks = Vec::with_capacity(nodes.len());

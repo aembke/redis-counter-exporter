@@ -18,6 +18,8 @@ regex = "1.10"
 futures = "0.3"
 tokio = { version = "1.37", features = ["full"] }
 tokio-postgres = { version = "0.7.12", features = ["runtime", "with-chrono-0_4"] }
+deadpool-postgres = "0.14.1"
+anyhow = "1.0.98"
 openssl = { version = "0.10.68", features = ["vendored"] }
 postgres-openssl = { version = "0.5.0", features = ["runtime"] }
 fred = { version = "10.0.3", features = ["i-std", "i-cluster", "i-memory", "replicas", "enable-native-tls", "vendored-openssl"] }

@@ -5,6 +5,7 @@ use crate::{
   status,
 };
 use chrono::{DateTime, Utc};
+use deadpool_postgres::Pool;
 use fred::{
   bytes::BytesMut,
   error::{Error as RedisError, ErrorKind},
@@ -63,11 +64,11 @@ fn build_sql(argv: &Argv, extractors: &[Extractor], values_len: usize) -> String
   let columns: Vec<String> = extractors.iter().map(|e| e.name.clone()).collect();
   let mut values: Vec<String> = Vec::with_capacity(values_len);
   let mut sql_idx = 1;
-  for _ in 0 .. values_len {
+  for _ in 0..values_len {
     let mut inner = Vec::with_capacity(extractors.len() + 2);
     inner.push(format!("${}", sql_idx));
     inner.push(format!("${}", sql_idx + 1));
-    for i in 0 .. extractors.len() {
+    for i in 0..extractors.len() {
       inner.push(format!("${}", sql_idx + i + 2));
     }
 
@@ -124,8 +125,8 @@ pub async fn save(
   argv: &Arc<Argv>,
   progress: &Arc<Progress>,
   index: Arc<Index>,
-  client: Client,
-) -> Result<(), RedisError> {
+  psql_pool: Pool,
+) -> anyhow::Result<()> {
   let index_len = index.len();
   status!(format!("Saving {} results...", index_len));
   progress.set_postgres_estimate(index_len as u64);
@@ -136,7 +137,7 @@ pub async fn save(
   while !indexed.is_empty() {
     let batch_size = cmp::min(indexed.len(), argv.psql_batch as usize);
     let mut batch = Vec::with_capacity(batch_size);
-    for _ in 0 .. batch_size {
+    for _ in 0..batch_size {
       batch.push(indexed.pop().unwrap());
     }
     let sql = build_sql(&argv, extractors, batch.len());
@@ -144,6 +145,10 @@ pub async fn save(
     trace!("Sending SQL: {}, with bindings: {:?}", sql, bindings);
     let params: Vec<_> = bindings.iter().map(|s| s as &(dyn ToSql + Sync)).collect();
 
+    let client = psql_pool
+      .get()
+      .await
+      .map_err(|e| anyhow::anyhow!("Failed to get PostgreSQL client from pool: {:?}", e))?;
     if let Err(e) = client.execute(&sql, params.as_slice()).await {
       error!("Error writing to PostgreSQL: {:?}", e);
       if argv.quiet {
@@ -154,7 +159,7 @@ pub async fn save(
       if argv.ignore {
         continue;
       } else {
-        return Err(RedisError::new(ErrorKind::Unknown, format!("{:?}", e)));
+        return Err(anyhow::anyhow!("Error writing to PostgreSQL: {:?}", e));
       }
     }
 
