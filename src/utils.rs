@@ -16,7 +16,7 @@ use futures::{
   future::{select, try_join_all, Either},
   pin_mut, Stream, TryStreamExt,
 };
-use log::{debug, error, log_enabled, trace};
+use log::{debug, error, log_enabled, trace, warn};
 use openssl::{
   pkey::PKey,
   ssl::{SslConnector, SslMethod},
@@ -96,11 +96,18 @@ pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error
   if argv.psql_tls {
     let mut builder = SslConnector::builder(SslMethod::tls()).map_err(map_tls_error)?;
 
-    if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
-      debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
-      let buf = fs::read(ca_cert_path)?;
-      let trusted_cert = X509::from_pem(&buf).map_err(map_tls_error)?;
-      builder.cert_store_mut().add_cert(trusted_cert).map_err(map_tls_error)?;
+    // Configure CA certificate and verification
+    match argv.tls_ca_cert.as_ref() {
+      None => {
+        warn!("No PostgreSQL CA certificate provided, disabling certificate verification");
+        builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
+      },
+      Some(ca_cert_path) => {
+        debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
+        let buf = fs::read(ca_cert_path)?;
+        let trusted_cert = X509::from_pem(&buf).map_err(map_tls_error)?;
+        builder.cert_store_mut().add_cert(trusted_cert).map_err(map_tls_error)?;
+      },
     }
 
     if let Some(key_path) = argv.tls_key.as_ref() {
