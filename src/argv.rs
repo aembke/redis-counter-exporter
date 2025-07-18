@@ -45,14 +45,34 @@ pub struct Argv {
   #[arg(long = "redis-tls", default_value = "false")]
   pub redis_tls: bool,
   /// A file path to the private key for a x509 identity used by the client.
-  #[arg(long = "tls-key", value_name = "PATH")]
+  #[arg(long = "tls-key", value_name = "PATH", hide = true)]
   pub tls_key: Option<String>,
   /// A file path to the certificate for a x509 identity used by the client.
-  #[arg(long = "tls-cert", value_name = "PATH")]
+  #[arg(long = "tls-cert", value_name = "PATH", hide = true)]
   pub tls_cert: Option<String>,
   /// A file path to a trusted certificate bundle.
-  #[arg(long = "tls-ca-cert", value_name = "PATH")]
+  #[arg(long = "tls-ca-cert", value_name = "PATH", hide = true)]
   pub tls_ca_cert: Option<String>,
+
+  /// A file path to the private key for a x509 identity used by the redis client.
+  #[arg(long = "redis-tls-key", value_name = "PATH")]
+  pub redis_tls_key: Option<String>,
+  /// A file path to the certificate for a x509 identity used by the redis client.
+  #[arg(long = "redis-tls-cert", value_name = "PATH")]
+  pub redis_tls_cert: Option<String>,
+  /// A file path to a trusted certificate bundle used by the redis client.
+  #[arg(long = "redis-tls-ca-cert", value_name = "PATH")]
+  pub redis_tls_ca_cert: Option<String>,
+
+  /// A file path to the private key for a x509 identity used by the postgres client.
+  #[arg(long = "psql-tls-key", value_name = "PATH")]
+  pub psql_tls_key: Option<String>,
+  /// A file path to the certificate for a x509 identity used by the postgres client.
+  #[arg(long = "psql-tls-cert", value_name = "PATH")]
+  pub psql_tls_cert: Option<String>,
+  /// A file path to a trusted certificate bundle used by the postgres client.
+  #[arg(long = "psql-tls-ca-cert", value_name = "PATH")]
+  pub psql_tls_ca_cert: Option<String>,
 
   // Shared Scan Arguments
   /// The glob pattern to provide in each `SCAN` command.
@@ -200,7 +220,7 @@ impl Argv {
       self.redis_cluster = true;
     }
     if self.extractors.is_empty() {
-      panic!("At least one extractor is required");
+      panic!("At least one extractor is required ");
     }
     // env vars can be Some("") when left unset
     if let Some(username) = self.redis_username.take() {
@@ -220,6 +240,25 @@ impl Argv {
       panic!("Missing PostgreSQL password argv.");
     }
 
+    if self.redis_tls_key.is_none() {
+      self.redis_tls_key = self.tls_key.clone();
+    }
+    if self.redis_tls_cert.is_none() {
+      self.redis_tls_cert = self.tls_cert.clone();
+    }
+    if self.redis_tls_ca_cert.is_none() {
+      self.redis_tls_ca_cert = self.tls_ca_cert.clone();
+    }
+    if self.psql_tls_key.is_none() {
+      self.psql_tls_key = self.tls_key.clone();
+    }
+    if self.psql_tls_cert.is_none() {
+      self.psql_tls_cert = self.tls_cert.clone();
+    }
+    if self.psql_tls_ca_cert.is_none() {
+      self.psql_tls_ca_cert = self.tls_ca_cert.clone();
+    }
+
     self
   }
 
@@ -231,7 +270,7 @@ impl Argv {
         let mut sorted: Vec<_> = fs::read_dir(path)
           .unwrap()
           .into_iter()
-          .map(|f| f.expect("Failed to inspect SQL file dir"))
+          .map(|f| f.expect("Failed to inspect SQL file dir "))
           .collect();
         sorted.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 

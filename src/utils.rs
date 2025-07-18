@@ -57,20 +57,20 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, Error> {
 
   if argv.redis_tls {
     let mut builder = TlsConnector::builder();
-    if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+    if let Some(ca_cert_path) = argv.redis_tls_ca_cert.as_ref() {
       debug!("Reading CA certificate from {}", ca_cert_path);
       let buf = fs::read(ca_cert_path)?;
       let trusted_cert = Certificate::from_pem(&buf)?;
       builder.add_root_certificate(trusted_cert);
     }
 
-    if let Some(key_path) = argv.tls_key.as_ref() {
-      if let Some(cert_path) = argv.tls_cert.as_ref() {
+    if let Some(key_path) = argv.redis_tls_key.as_ref() {
+      if let Some(cert_path) = argv.redis_tls_cert.as_ref() {
         debug!("Reading client key from {}, cert from {}", key_path, cert_path);
         let client_key_buf = fs::read(key_path)?;
         let client_cert_buf = fs::read(cert_path)?;
 
-        let client_cert_chain = if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+        let client_cert_chain = if let Some(ca_cert_path) = argv.redis_tls_ca_cert.as_ref() {
           let ca_cert_buf = fs::read(ca_cert_path)?;
 
           let mut chain = Vec::with_capacity(ca_cert_buf.len() + client_cert_buf.len());
@@ -96,23 +96,24 @@ pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error
   if argv.psql_tls {
     let mut builder = SslConnector::builder(SslMethod::tls()).map_err(map_tls_error)?;
 
-    if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+    if let Some(ca_cert_path) = argv.psql_tls_ca_cert.as_ref() {
       debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
       let buf = fs::read(ca_cert_path)?;
       let trusted_cert = X509::from_pem(&buf).map_err(map_tls_error)?;
       builder.cert_store_mut().add_cert(trusted_cert).map_err(map_tls_error)?;
     }
 
-    if let Some(key_path) = argv.tls_key.as_ref() {
-      if let Some(cert_path) = argv.tls_cert.as_ref() {
+    if let Some(key_path) = argv.psql_tls_key.as_ref() {
+      if let Some(cert_path) = argv.psql_tls_cert.as_ref() {
         debug!(
           "Reading PostgreSQL client key from {}, cert from {}",
-          key_path, cert_path
+          key_path,
+          cert_path
         );
         let client_key_buf = fs::read(key_path)?;
         let client_cert_buf = fs::read(cert_path)?;
 
-        let client_cert_chain = if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
+        let client_cert_chain = if let Some(ca_cert_path) = argv.psql_tls_ca_cert.as_ref() {
           let ca_cert_buf = fs::read(ca_cert_path)?;
 
           let mut chain = Vec::with_capacity(ca_cert_buf.len() + client_cert_buf.len());

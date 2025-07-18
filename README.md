@@ -43,14 +43,23 @@ Options:
       --redis-tls
           Whether to use TLS when connecting to Redis
 
-      --tls-key <PATH>
-          A file path to the private key for a x509 identity used by the client
+      --redis-tls-key <PATH>
+          A file path to the private key for a x509 identity used by the redis client
 
-      --tls-cert <PATH>
-          A file path to the certificate for a x509 identity used by the client
+      --redis-tls-cert <PATH>
+          A file path to the certificate for a x509 identity used by the redis client
 
-      --tls-ca-cert <PATH>
-          A file path to a trusted certificate bundle
+      --redis-tls-ca-cert <PATH>
+          A file path to a trusted certificate bundle used by the redis client
+
+      --psql-tls-key <PATH>
+          A file path to the private key for a x509 identity used by the postgres client
+
+      --psql-tls-cert <PATH>
+          A file path to the certificate for a x509 identity used by the postgres client
+
+      --psql-tls-ca-cert <PATH>
+          A file path to a trusted certificate bundle used by the postgres client
 
       --pattern <STRING>
           The glob pattern to provide in each `SCAN` command
