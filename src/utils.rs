@@ -96,9 +96,6 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, Error> {
 fn build_tls_connector() -> Result<SslConnectorBuilder, Error> {
   let mut ssl =
     SslConnector::builder(SslMethod::tls()).map_err(|e| Error::new(ErrorKind::Tls, format!("{:?}", e)))?;
-
-  // ALlow unsafe renegotiation to connect to servers without this vuln patched.
-  // See https://oktainc.atlassian.net/browse/OKTA-452078.
   ssl.set_options(SslOptions::ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
 
   let mut store = X509StoreBuilder::new().expect("Unable to create OpenSSL X509 Cert Store");
