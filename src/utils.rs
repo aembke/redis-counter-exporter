@@ -19,11 +19,12 @@ use futures::{
 use log::{debug, error, log_enabled, trace};
 use openssl::{
   pkey::PKey,
-  ssl::{SslConnector, SslMethod},
-  x509::X509,
+  ssl::{SslConnector, SslConnectorBuilder, SslMethod},
+  x509::{store::X509StoreBuilder, X509},
 };
 use postgres_openssl::MakeTlsConnector;
 use regex::Regex;
+use std::ops::Deref;
 use std::{
   collections::HashMap,
   fmt::Debug,
@@ -92,10 +93,26 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, Error> {
   }
 }
 
+fn build_tls_connector() -> Result<SslConnectorBuilder, Error> {
+  let mut ssl =
+    SslConnector::builder(SslMethod::tls()).map_err(|e| Error::new(ErrorKind::Tls, format!("{:?}", e)))?;
+
+  let mut store = X509StoreBuilder::new().expect("Unable to create OpenSSL X509 Cert Store");
+
+  for webpki in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
+    let x509 = X509::from_der(webpki.deref()).expect("Unable to parse WebPKI Root Cert from DER");
+    store
+      .add_cert(x509)
+      .expect("Unable to add X509 Cert to OpenSSL cert store");
+  }
+  ssl.set_cert_store(store.build());
+
+  Ok(ssl)
+}
+
 pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error> {
   if argv.psql_tls {
-    let mut builder = SslConnector::builder(SslMethod::tls()).map_err(map_tls_error)?;
-
+    let mut builder = build_tls_connector().map_err(map_tls_error)?;
     if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
       debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
       let buf = fs::read(ca_cert_path)?;

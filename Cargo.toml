@@ -1,6 +1,6 @@
 [package]
 name = "redis-counter-exporter"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["Alec Embke <aembke@gmail.com>"]
@@ -21,6 +21,7 @@ tokio-postgres = { version = "0.7.12", features = ["runtime", "with-chrono-0_4"]
 deadpool-postgres = "0.14.1"
 anyhow = "1.0.98"
 openssl = { version = "0.10.68", features = ["vendored"] }
+webpki-root-certs = "1.0.0"
 postgres-openssl = { version = "0.5.0", features = ["runtime"] }
 fred = { version = "10.0.3", features = ["i-std", "i-cluster", "i-memory", "replicas", "enable-native-tls", "vendored-openssl"] }
 indicatif = "0.17"
