@@ -11,7 +11,7 @@ use fred::{
   prelude::*,
   types::{config::Server, ExpireOptions},
 };
-use log::{debug, error};
+use log::{debug, error, warn};
 use regex::Regex;
 use std::sync::Arc;
 
@@ -73,8 +73,8 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
             }
           }
 
-          let counts = match pipeline.all::<Vec<Option<u64>>>().await {
-            Ok(counts) => counts,
+          let raw_values = match pipeline.all::<Vec<Option<String>>>().await {
+            Ok(values) => values,
             Err(e) => {
               error!("{} Error calling GET or GETSET: {:?}", server, e);
 
@@ -85,6 +85,19 @@ async fn scan_node(state: Shared, server: Server, client: Client) -> Result<(usi
               }
             },
           };
+
+          let counts: Vec<Option<u64>> = raw_values
+            .into_iter()
+            .map(|opt_str| {
+              opt_str.and_then(|s| {
+                s.parse::<u64>()
+                  .map_err(|e| {
+                    warn!("Failed to parse '{}' as u64: {}", s, e);
+                  })
+                  .ok()
+              })
+            })
+            .collect();
 
           for (idx, key) in keys.iter().enumerate() {
             if let Some(value) = counts[idx] {
