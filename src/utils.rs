@@ -19,7 +19,7 @@ use futures::{
 use log::{debug, error, log_enabled, trace};
 use openssl::{
   pkey::PKey,
-  ssl::{SslConnector, SslConnectorBuilder, SslMethod, SslOptions},
+  ssl::{SslConnector, SslConnectorBuilder, SslMethod},
   x509::{store::X509StoreBuilder, X509},
 };
 use postgres_openssl::MakeTlsConnector;
@@ -96,7 +96,6 @@ fn build_tls_config(argv: &Argv) -> Result<Option<TlsConnector>, Error> {
 fn build_tls_connector() -> Result<SslConnectorBuilder, Error> {
   let mut ssl =
     SslConnector::builder(SslMethod::tls()).map_err(|e| Error::new(ErrorKind::Tls, format!("{:?}", e)))?;
-  ssl.set_options(SslOptions::ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
 
   let mut store = X509StoreBuilder::new().expect("Unable to create OpenSSL X509 Cert Store");
 
