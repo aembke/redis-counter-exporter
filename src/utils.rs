@@ -113,11 +113,18 @@ fn build_tls_connector() -> Result<SslConnectorBuilder, Error> {
 pub fn build_postgres_tls(argv: &Argv) -> Result<Option<MakeTlsConnector>, Error> {
   if argv.psql_tls {
     let mut builder = build_tls_connector().map_err(map_tls_error)?;
+
     if let Some(ca_cert_path) = argv.tls_ca_cert.as_ref() {
       debug!("Reading PostgreSQL CA certificate from {}", ca_cert_path);
       let buf = fs::read(ca_cert_path)?;
-      let trusted_cert = X509::from_pem(&buf).map_err(map_tls_error)?;
-      builder.cert_store_mut().add_cert(trusted_cert).map_err(map_tls_error)?;
+
+      // Parse all certificates from the PEM bundle
+      let certs = X509::stack_from_pem(&buf).map_err(map_tls_error)?;
+      debug!("Loaded {} certificate(s) from {}", certs.len(), ca_cert_path);
+
+      for cert in certs {
+        builder.cert_store_mut().add_cert(cert).map_err(map_tls_error)?;
+      }
     }
 
     if let Some(key_path) = argv.tls_key.as_ref() {
